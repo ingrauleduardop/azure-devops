@@ -1,0 +1,86 @@
+parameters:
+- name : 'enviromentParam'
+  default: 'STAGE'
+  type: string
+- name : 'enviromentAbrevParam'
+  default: 'STG'
+  type: string
+
+variables:
+- name: terraformVersion
+  value: '1.1.2'
+- name: resourceGroup
+  value: 'terraformRG'
+- name: storageAccount
+  value: 'terraformbhrpasa'
+- name: containerName
+  value: 'terraformbhrpcontainer'
+- name: key
+  value: 'terraform-tfstate'
+- name: serviceConnection
+  value: 'terraformfull-sc'
+- name: pipelineEnvironment
+  value: 'terraformenv'
+
+stages:
+  - stage: validate
+    jobs:
+      - job: validate 
+        continueOnError: false
+        steps:
+          - task: TerraformInstaller@0
+            displayName: 'install'
+            inputs:
+              terraformVersion: $(terraformVersion)
+          - task: TerraformTaskV2@2
+            displayName: init
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              backendServiceArm: $(serviceConnection)
+              backendAzureRmResourceGroupName: $(resourceGroup)
+              backendAzureRmStorageAccountName: $(storageAccount)
+              backendAzureRmContainerName: $(containerName)
+              backendAzureRmKey: $(key)
+          - task: TerraformTaskV2@2
+            displayName: validate
+            inputs:
+              provider: 'azurerm'
+              command: 'validate'
+  - stage: deploy
+    jobs:
+      - deployment: deploy_terraform
+        continueOnError: false
+        environment: $(pipelineEnvironment)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: TerraformInstaller@0
+                  displayName: 'install'
+                  inputs:
+                    terraformVersion: $(terraformVersion)
+                - task: TerraformTaskV2@2
+                  displayName: 'init'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'init'
+                    backendServiceArm: $(serviceConnection)
+                    backendAzureRmResourceGroupName: $(resourceGroup)
+                    backendAzureRmStorageAccountName: $(storageAccount)
+                    backendAzureRmContainerName: $(containerName)
+                    backendAzureRmKey: $(key)
+                - task: TerraformTaskV2@2
+                  displayName: 'plan'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'plan'
+                    environmentServiceNameAzureRM: $(serviceConnection)
+                    commandOptions: -input=false -var "environment=${{ parameters.enviromentParam }}" -var "environment_abrev=${{ parameters.enviromentAbrevParam }}"
+                - task: TerraformTaskV2@2
+                  displayName: 'apply'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'apply'
+                    environmentServiceNameAzureRM: $(serviceConnection)
